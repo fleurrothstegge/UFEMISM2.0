@@ -42,7 +42,8 @@ contains
                  dv_dy**2 + &
                  du_dx * dv_dy + &
                  0.25_dp * (du_dy + dv_dx)**2 + &
-                 Glens_flow_law_epsilon_sq_0_applied
+                 1e-6_dp
+                !  Glens_flow_law_epsilon_sq_0_applied
 
     ! Calculate the effective viscosity eta
     eta = 0.5_dp * A**(-1._dp / C%Glens_flow_law_exponent) * &
@@ -71,7 +72,8 @@ contains
                  du_dx * dv_dy + &
                  0.25_dp * (du_dy + dv_dx)**2 + &
                  0.25_dp * (du_dz**2 + dv_dz**2) + &
-                 Glens_flow_law_epsilon_sq_0_applied
+                 1e-6_dp
+                !  Glens_flow_law_epsilon_sq_0_applied
 
     ! Calculate the effective viscosity eta
     eta = 0.5_dp * A**(-1._dp / C%Glens_flow_law_exponent) * &
