@@ -107,7 +107,7 @@ MODULE model_configuration
     ! Some pre-processing stuff for reference ice geometry
     REAL(dp)            :: refgeo_Hi_min_config                         = 2.0_dp                           ! [m]             [default: 2.0]     Remove ice thinner than this value in the reference ice geometry. Particularly useful for BedMachine Greenland, which somehow covers the entire tundra with half a meter of ice...
     LOGICAL             :: do_smooth_geometry_config                    = .FALSE.                          ! Whether or not to smooth the reference bedrock
-    REAL(dp)            :: r_smooth_geometry_config                     = 0.5_dp                           ! Geometry smoothing radius (in number of reference grid cells)
+    REAL(dp)            :: r_smooth_geometry_config                     = 0.5_dp                           ! [m]             Geometry smoothing radius
     LOGICAL             :: remove_Lake_Vostok_config                    = .TRUE.                           ! Whether or not to replace subglacial Lake Vostok in Antarctica with ice (recommended to set to TRUE, otherwise it will really slow down your model for the first few hundred years...)
 
 
@@ -820,7 +820,9 @@ MODULE model_configuration
   ! ===============
 
     ! Output
-    LOGICAL             :: do_write_laddie_output_config                = .FALSE.                          ! Whether or not to write output on laddie time
+    LOGICAL             :: do_write_laddie_output_fields_config         = .FALSE.                          ! Whether or not to write output fields on laddie time
+    LOGICAL             :: do_write_laddie_output_scalar_config         = .FALSE.                          ! Whether or not to write output scalars on laddie time
+    REAL(dp)            :: time_interval_scalar_output_config           = 1._dp                            ! [days] Time interval at which to write out buffered scalars
 
     ! Time step
     REAL(dp)            :: dt_laddie_config                             = 360._dp                          ! [s] Time step for integration of laddie model
@@ -828,10 +830,11 @@ MODULE model_configuration
     REAL(dp)            :: time_duration_laddie_init_config             = 30._dp                           ! [days] Duration of initial run cycle
 
     ! Integration
-    CHARACTER(LEN=256)  :: choice_laddie_integration_scheme_config      = ''                               ! Choose integration scheme. Options: 'euler', 'fbrk3'
+    CHARACTER(LEN=256)  :: choice_laddie_integration_scheme_config      = ''                               ! Choose integration scheme. Options: 'euler', 'fbrk3', 'lfra'
     REAL(dp)            :: laddie_fbrk3_beta1_config                    = 0.0_dp                           ! [] beta1 factor in FBRK3 integration. Must be between 0 and 1
     REAL(dp)            :: laddie_fbrk3_beta2_config                    = 0.0_dp                           ! [] beta2 factor in FBRK3 integration. Must be between 0 and 1
     REAL(dp)            :: laddie_fbrk3_beta3_config                    = 0.0_dp                           ! [] beta3 factor in FBRK3 integration. Must be between 0 and 1
+    REAL(dp)            :: laddie_lfra_nu_config                        = 0.1_dp                           ! [] nu factor in LFRA integration. Must be between 0 and 1
 
     ! Momentum advection
     CHARACTER(LEN=256)  :: choice_laddie_momentum_advection_config      = ''                               ! Choose momentum advection scheme. Options: 'none', 'upstream'
@@ -869,6 +872,7 @@ MODULE model_configuration
 
     ! Stability
     REAL(dp)            :: laddie_thickness_minimum_config              = 2.0_dp                           ! [m] Minimum layer thickness allowed
+    REAL(dp)            :: laddie_thickness_maximum_config              = 1500.0_dp                        ! [m] Maximum layer thickness allowed
     REAL(dp)            :: laddie_velocity_maximum_config               = 1.414_dp                         ! [m s^-1] Maximum velocity allowed
     REAL(dp)            :: laddie_buoyancy_minimum_config               = 5.0E-3_dp                        ! [kg m^-3] Minimum density difference allowed
 
@@ -1842,7 +1846,9 @@ MODULE model_configuration
   ! ===============
 
     ! Output
-    LOGICAL             :: do_write_laddie_output
+    LOGICAL             :: do_write_laddie_output_fields
+    LOGICAL             :: do_write_laddie_output_scalar
+    REAL(dp)            :: time_interval_scalar_output
 
     ! Time step
     REAL(dp)            :: dt_laddie
@@ -1854,6 +1860,7 @@ MODULE model_configuration
     REAL(dp)            :: laddie_fbrk3_beta1
     REAL(dp)            :: laddie_fbrk3_beta2
     REAL(dp)            :: laddie_fbrk3_beta3
+    REAL(dp)            :: laddie_lfra_nu
 
     ! Momentum advection
     CHARACTER(LEN=256)  :: choice_laddie_momentum_advection
@@ -1891,6 +1898,7 @@ MODULE model_configuration
 
     ! Stability
     REAL(dp)            :: laddie_thickness_minimum
+    REAL(dp)            :: laddie_thickness_maximum
     REAL(dp)            :: laddie_velocity_maximum
     REAL(dp)            :: laddie_buoyancy_minimum
 
@@ -2785,7 +2793,9 @@ CONTAINS
       filename_BMB_laddie_initial_output_config                   , &
       dir_BMB_laddie_model_config                                 , &
       conda_activate_prompt_config                                , &
-      do_write_laddie_output_config                               , &
+      do_write_laddie_output_fields_config                        , &
+      do_write_laddie_output_scalar_config                        , &
+      time_interval_scalar_output_config                          , &
       dt_laddie_config                                            , &
       time_duration_laddie_config                                 , &
       time_duration_laddie_init_config                            , &
@@ -2793,6 +2803,7 @@ CONTAINS
       laddie_fbrk3_beta1_config                                   , &
       laddie_fbrk3_beta2_config                                   , &
       laddie_fbrk3_beta3_config                                   , &
+      laddie_lfra_nu_config                                       , &
       choice_laddie_momentum_advection_config                     , &
       laddie_initial_thickness_config                             , &
       laddie_initial_T_offset_config                              , &
@@ -2812,6 +2823,7 @@ CONTAINS
       laddie_Holland2006_cl_config                                , &
       laddie_Gaspar1988_mu_config                                 , &
       laddie_thickness_minimum_config                             , &
+      laddie_thickness_maximum_config                             , &
       laddie_velocity_maximum_config                              , &
       laddie_buoyancy_minimum_config                              , &
       choice_laddie_tides_config                                  , &
@@ -3774,8 +3786,9 @@ CONTAINS
   ! ===============
 
     ! Output
-    C%do_write_laddie_output                                 = do_write_laddie_output_config
-
+    C%do_write_laddie_output_fields                          = do_write_laddie_output_fields_config
+    C%do_write_laddie_output_scalar                          = do_write_laddie_output_scalar_config
+    C%time_interval_scalar_output                            = time_interval_scalar_output_config
     ! Time step
     C%dt_laddie                                              = dt_laddie_config
     C%time_duration_laddie                                   = time_duration_laddie_config
@@ -3786,6 +3799,7 @@ CONTAINS
     C%laddie_fbrk3_beta1                                     = laddie_fbrk3_beta1_config
     C%laddie_fbrk3_beta2                                     = laddie_fbrk3_beta2_config
     C%laddie_fbrk3_beta3                                     = laddie_fbrk3_beta3_config
+    C%laddie_lfra_nu                                         = laddie_lfra_nu_config
 
     ! Momentum advection
     C%choice_laddie_momentum_advection                       = choice_laddie_momentum_advection_config
@@ -3823,6 +3837,7 @@ CONTAINS
 
     ! Stability
     C%laddie_thickness_minimum                               = laddie_thickness_minimum_config
+    C%laddie_thickness_maximum                               = laddie_thickness_maximum_config
     C%laddie_velocity_maximum                                = laddie_velocity_maximum_config
     C%laddie_buoyancy_minimum                                = laddie_buoyancy_minimum_config
 
